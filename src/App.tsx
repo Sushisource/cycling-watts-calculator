@@ -1,0 +1,725 @@
+import { useEffect, useState } from "react";
+import { calculate, parseTeeth, wheelCircumference } from "./physics";
+import { cassettes, series } from "./data/gears";
+import "./App.css";
+const defaults = {
+  cadence: 90,
+  grade: 0,
+  mass: 80,
+  circumference: wheelCircumference(622, 28),
+  cda: 0.32,
+  crr: 0.005,
+  loss: 0.025,
+  wind: 0,
+  altitude: 0,
+  imperial: false,
+  front: "105",
+  rear: "105",
+  fo: 0,
+  ro: 0,
+  ring: 0,
+  cog: 5,
+  follow: true,
+  cf: "50,34",
+  cr: "11,13,15,17,19,21,24,28,32,36",
+  tire: "622-28",
+};
+type State = typeof defaults;
+function load(): State {
+  try {
+    const v = JSON.parse(localStorage.getItem("cadence-lab") || "null");
+    if (!v) return defaults;
+    const s = { ...defaults };
+    for (const k of Object.keys(s) as (keyof State)[])
+      if (
+        typeof v[k] === typeof s[k] &&
+        (typeof v[k] !== "number" || Number.isFinite(v[k]))
+      )
+        Object.assign(s, { [k]: v[k] });
+    if (
+      ![s.front, s.rear].every(
+        (id) => id === "custom" || series.some((g) => g.id === id),
+      ) ||
+      s.mass < 10 ||
+      s.mass > 300 ||
+      s.loss < 0 ||
+      s.loss > 0.5 ||
+      s.cda < 0 ||
+      s.crr < 0 ||
+      s.circumference <= 0 ||
+      s.altitude < -500 ||
+      s.altitude > 10000 ||
+      s.cadence < 0
+    )
+      return defaults;
+    return s;
+  } catch {
+    return defaults;
+  }
+}
+function NumberField({
+  label,
+  value,
+  onChange,
+  min = 0,
+  max = 1000,
+  step = 1,
+}: {
+  label: string;
+  value: number;
+  onChange: (n: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+}) {
+  return (
+    <label className="field">
+      {label}
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={+value.toFixed(4)}
+        onChange={(e) => {
+          const n = e.target.valueAsNumber;
+          if (Number.isFinite(n) && n >= min && n <= max) onChange(n);
+        }}
+      />
+    </label>
+  );
+}
+function Drawing({
+  teeth,
+  active,
+  select,
+  front,
+}: {
+  teeth: number[];
+  active: number;
+  select: (i: number) => void;
+  front: boolean;
+}) {
+  const width = Math.max(300, teeth.length * 53);
+  return (
+    <div className="gear-scroll">
+      <svg
+        viewBox={`0 0 ${width} 150`}
+        aria-label={front ? "Chainrings" : "Cassette"}
+        role="group"
+      >
+        <line
+          x1="0"
+          y1="65"
+          x2={width}
+          y2="65"
+          stroke="#e2e7dc"
+          strokeDasharray="3 5"
+        />
+        {teeth.map((t, i) => {
+          const x = (width / (teeth.length + 1)) * (i + 1),
+            r = t * 0.95;
+          return (
+            <g
+              key={t}
+              className={i === active ? "gear active" : "gear"}
+              role="button"
+              tabIndex={0}
+              aria-label={`${t} tooth ${front ? "chainring" : "cog"}`}
+              aria-pressed={i === active}
+              onClick={() => select(i)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  select(i);
+                }
+              }}
+            >
+              <circle cx={x} cy="65" r={r} />
+              <circle
+                className="teeth"
+                cx={x}
+                cy="65"
+                r={r + 1}
+                strokeDasharray={`${(Math.PI * (r + 1)) / t} ${(Math.PI * (r + 1)) / t}`}
+              />
+              <circle className="hub" cx={x} cy="65" r={Math.max(4, r * 0.4)} />
+              <text x={x} y="140" textAnchor="middle">
+                {t}T
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+export default function App() {
+  const [s, set] = useState(load),
+    update = (p: Partial<State>) => set((old) => ({ ...old, ...p }));
+  useEffect(() => {
+    try {
+      localStorage.setItem("cadence-lab", JSON.stringify(s));
+    } catch {
+      /* Storage is optional. */
+    }
+  }, [s]);
+  const fs = series.find((g) => g.id === s.front) || series[2],
+    rs = series.find((g) => g.id === s.rear) || series[2];
+  const cf = parseTeeth(s.cf, true),
+    cr = parseTeeth(s.cr);
+  const rings =
+    s.front === "custom" ? cf || [50, 34] : fs.fronts[s.fo] || fs.fronts[0];
+  const cogs =
+    s.rear === "custom" ? cr || [17] : cassettes[rs.rears[s.ro] || rs.rears[0]];
+  const ring = Math.max(0, Math.min(s.ring, rings.length - 1)),
+    cog = Math.max(0, Math.min(s.cog, cogs.length - 1));
+  const result = calculate(s, rings[ring], cogs[cog]),
+    unit = s.imperial ? "mph" : "km/h",
+    factor = s.imperial ? 2.236936 : 3.6;
+  const changeSeries = (id: string, front: boolean) =>
+    update(
+      front
+        ? {
+            front: id,
+            fo: 0,
+            ring: 0,
+            ...(s.follow ? { rear: id, ro: 0, cog: 0 } : {}),
+          }
+        : { rear: id, ro: 0, cog: 0, follow: false },
+    );
+  const picker = (front: boolean) => {
+    const id = front ? s.front : s.rear,
+      g = front ? fs : rs;
+    return (
+      <div className="picker">
+        <div className="section-label">
+          <span>{front ? "01 / FRONT" : "02 / REAR"}</span>
+          <b>{front ? "Chainrings" : "Cassette"}</b>
+        </div>
+        <div className="two-col">
+          <label className="field">
+            Manufacturer
+            <select
+              value={id === "custom" ? "Custom" : g.manufacturer}
+              onChange={(e) =>
+                changeSeries(
+                  e.target.value === "Custom"
+                    ? "custom"
+                    : series.find(
+                        (x) =>
+                          x.manufacturer === e.target.value &&
+                          x.discipline === g.discipline,
+                      )!.id,
+                  front,
+                )
+              }
+            >
+              {["Shimano", "SRAM", "Custom"].map((v) => (
+                <option key={v}>{v}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            Discipline
+            <select
+              disabled={id === "custom"}
+              value={g.discipline}
+              onChange={(e) =>
+                changeSeries(
+                  series.find(
+                    (x) =>
+                      x.manufacturer === g.manufacturer &&
+                      x.discipline === e.target.value,
+                  )!.id,
+                  front,
+                )
+              }
+            >
+              <option>Road</option>
+              <option>Gravel</option>
+            </select>
+          </label>
+        </div>
+        {id === "custom" ? (
+          <label className="field">
+            {front ? "1–2 rings" : "Cogs"} · comma-separated
+            <input
+              value={front ? s.cf : s.cr}
+              aria-invalid={!(front ? cf : cr)}
+              onChange={(e) =>
+                update(
+                  front
+                    ? { cf: e.target.value, ring: 0 }
+                    : { cr: e.target.value, cog: 0 },
+                )
+              }
+            />
+            {!(front ? cf : cr) && (
+              <small className="error">
+                Use unique integers 1–100. Preview uses fallback gearing.
+              </small>
+            )}
+          </label>
+        ) : (
+          <>
+            <label className="field">
+              Groupset / series
+              <select
+                value={id}
+                onChange={(e) => changeSeries(e.target.value, front)}
+              >
+                {series
+                  .filter(
+                    (x) =>
+                      x.manufacturer === g.manufacturer &&
+                      x.discipline === g.discipline,
+                  )
+                  .map((x) => (
+                    <option value={x.id} key={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label className="field">
+              {front ? "Chainring combination" : "Cassette range"}
+              <select
+                value={front ? s.fo : s.ro}
+                onChange={(e) =>
+                  update(
+                    front
+                      ? { fo: +e.target.value, ring: 0 }
+                      : { ro: +e.target.value, cog: 0 },
+                  )
+                }
+              >
+                {(front ? g.fronts : g.rears).map((v, i) => (
+                  <option key={i} value={i}>
+                    {Array.isArray(v)
+                      ? v.join(" / ") + " T"
+                      : v.replace(/^[^ ]+ /, "") + " T"}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        )}
+        <Drawing
+          teeth={front ? rings : cogs}
+          active={front ? ring : cog}
+          front={front}
+          select={(i) => update(front ? { ring: i } : { cog: i })}
+        />
+        <div className="gear-caption">
+          {front ? rings[ring] : cogs[cog]} tooth {front ? "chainring" : "cog"}
+          <span>Click a gear to select</span>
+        </div>
+      </div>
+    );
+  };
+  return (
+    <>
+      <header>
+        <a className="brand" href="./">
+          <span className="brand-icon">↗</span> CADENCE <span>/ LAB</span>
+        </a>
+        <div className="header-right">
+          <span className="local-status">● All calculations on-device</span>
+          <div className="segmented">
+            {[false, true].map((v) => (
+              <button
+                key={String(v)}
+                className={s.imperial === v ? "selected" : ""}
+                onClick={() => update({ imperial: v })}
+              >
+                {v ? "Imperial" : "Metric"}
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
+      <main>
+        <div className="intro">
+          <div>
+            <div className="eyebrow">THE CYCLING POWER CALCULATOR</div>
+            <h1>Find your next gear.</h1>
+            <p>Explore the relationship between gearing, speed, and effort.</p>
+          </div>
+          <span className="model-badge">STEADY-STATE MODEL ↗</span>
+        </div>
+        <div className="workspace">
+          <div className="controls">
+            <section className="card ride">
+              <div className="card-title">
+                <h2>Riding conditions</h2>
+                <span>01</span>
+              </div>
+              {(
+                [
+                  {
+                    key: "cadence",
+                    name: "Cadence",
+                    desc: "Your pedaling rhythm",
+                    min: 40,
+                    max: 140,
+                    step: 1,
+                    unit: "rpm",
+                    left: "40 rpm",
+                    right: "140 rpm",
+                  },
+                  {
+                    key: "grade",
+                    name: "Road gradient",
+                    desc:
+                      s.grade === 0
+                        ? "A little room to get up to speed"
+                        : s.grade > 0
+                          ? "Up the road, up the watts"
+                          : "Let gravity do some of the work",
+                    min: -15,
+                    max: 25,
+                    step: 0.1,
+                    unit: "%",
+                    left: "−15% descent",
+                    right: "25% climb",
+                  },
+                ] as const
+              ).map((c) => (
+                <div key={c.key}>
+                  <div className="slider-row">
+                    <div>
+                      <h3>{c.name}</h3>
+                      <span>{c.desc}</span>
+                    </div>
+                    <div className="number-unit">
+                      <input
+                        aria-label={c.name}
+                        type="number"
+                        value={s[c.key]}
+                        min={c.min}
+                        max={c.max}
+                        step={c.step}
+                        onChange={(e) => {
+                          const n = e.target.valueAsNumber;
+                          if (Number.isFinite(n) && n >= c.min && n <= c.max)
+                            update({ [c.key]: n });
+                        }}
+                      />
+                      <span>{c.unit}</span>
+                    </div>
+                  </div>
+                  <input
+                    className="range"
+                    aria-label={`${c.name} slider`}
+                    type="range"
+                    min={c.min}
+                    max={c.max}
+                    step={c.step}
+                    value={s[c.key]}
+                    onChange={(e) => update({ [c.key]: +e.target.value })}
+                  />
+                  <div className="range-labels">
+                    <span>{c.left}</span>
+                    <span>{c.right}</span>
+                  </div>
+                </div>
+              ))}
+            </section>
+            <section className="card drivetrain">
+              <div className="card-title">
+                <h2>Your drivetrain</h2>
+                <span>02</span>
+              </div>
+              <div className="follow-row">
+                <span>Build your setup</span>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={s.follow}
+                    onChange={(e) =>
+                      update({
+                        follow: e.target.checked,
+                        ...(e.target.checked
+                          ? { rear: s.front, ro: 0, cog: 0 }
+                          : {}),
+                      })
+                    }
+                  />{" "}
+                  Match rear to front
+                </label>
+              </div>
+              <div className="pickers">
+                {picker(true)}
+                {picker(false)}
+              </div>
+              <p className="compatibility">
+                ⓘ Mix and match to compare ratios. Component compatibility is
+                not guaranteed.
+              </p>
+            </section>
+            <details className="card advanced">
+              <summary>
+                Advanced settings <span>Rider, tires & environment</span>
+              </summary>
+              <div className="advanced-grid">
+                <NumberField
+                  label={`Rider + bike mass (${s.imperial ? "lb" : "kg"})`}
+                  value={s.mass * (s.imperial ? 2.204623 : 1)}
+                  min={s.imperial ? 22.05 : 10}
+                  max={s.imperial ? 661 : 300}
+                  onChange={(n) =>
+                    update({ mass: n / (s.imperial ? 2.204623 : 1) })
+                  }
+                />
+                <label className="field">
+                  Tire size (ETRTO)
+                  <select
+                    value={s.tire}
+                    onChange={(e) => {
+                      const tire = e.target.value,
+                        [bsd, w] = tire.split("-").map(Number);
+                      update({
+                        tire,
+                        ...(tire === "custom"
+                          ? {}
+                          : { circumference: wheelCircumference(bsd, w) }),
+                      });
+                    }}
+                  >
+                    {[25, 28, 30, 32, 35, 40, 45].map((w) => (
+                      <option key={w} value={`622-${w}`}>
+                        700 × {w} · {w}-622
+                      </option>
+                    ))}
+                    {[47, 50].map((w) => (
+                      <option key={w} value={`584-${w}`}>
+                        650b × {w} · {w}-584
+                      </option>
+                    ))}
+                    <option value="custom">Custom circumference</option>
+                  </select>
+                </label>
+                <NumberField
+                  label="Circumference (mm)"
+                  value={s.circumference * 1000}
+                  min={500}
+                  max={4000}
+                  onChange={(n) =>
+                    update({ circumference: n / 1000, tire: "custom" })
+                  }
+                />
+                <label className="field">
+                  Position preset
+                  <select
+                    value={
+                      [0.4, 0.32, 0.28, 0.23].includes(s.cda) ? s.cda : "custom"
+                    }
+                    onChange={(e) => {
+                      if (e.target.value !== "custom")
+                        update({ cda: +e.target.value });
+                    }}
+                  >
+                    <option value="0.4">Tops · 0.40</option>
+                    <option value="0.32">Hoods · 0.32</option>
+                    <option value="0.28">Drops · 0.28</option>
+                    <option value="0.23">Aero / TT · 0.23</option>
+                    <option value="custom">Custom CdA</option>
+                  </select>
+                </label>
+                <NumberField
+                  label="CdA (m²)"
+                  value={s.cda}
+                  max={2}
+                  step={0.01}
+                  onChange={(n) => update({ cda: n })}
+                />
+                <NumberField
+                  label="Rolling resistance · Crr"
+                  value={s.crr}
+                  max={0.1}
+                  step={0.001}
+                  onChange={(n) => update({ crr: n })}
+                />
+                <NumberField
+                  label="Drivetrain loss (%)"
+                  value={s.loss * 100}
+                  max={50}
+                  step={0.1}
+                  onChange={(n) => update({ loss: n / 100 })}
+                />
+                <NumberField
+                  label={`Wind (${unit}) · + head / − tail`}
+                  value={s.wind * factor}
+                  min={-100}
+                  max={100}
+                  step={0.5}
+                  onChange={(n) => update({ wind: n / factor })}
+                />
+                <NumberField
+                  label={`Altitude (${s.imperial ? "ft" : "m"})`}
+                  value={s.altitude * (s.imperial ? 3.28084 : 1)}
+                  min={s.imperial ? -1640 : -500}
+                  max={s.imperial ? 32808 : 10000}
+                  onChange={(n) =>
+                    update({ altitude: n / (s.imperial ? 3.28084 : 1) })
+                  }
+                />
+              </div>
+              <p className="note">
+                Theoretical tire circumference: π × (BSD + 2 × width). Actual
+                rollout varies with tire and pressure.
+              </p>
+            </details>
+          </div>
+          <aside>
+            <section className="result-card">
+              <div className="result-top">
+                <span>YOUR EFFORT</span>
+                <span className="live">● LIVE</span>
+              </div>
+              <div className="power">
+                {Math.round(result.power)}
+                <span>W</span>
+              </div>
+              <p className="power-label">
+                {result.signedPower < 0
+                  ? "Coasting — no pedaling required"
+                  : "Required power at the pedals"}
+              </p>
+              <div className="result-primary">
+                <div>
+                  <strong>
+                    {(result.power / s.mass).toFixed(2)}
+                    <small>W/kg</small>
+                  </strong>
+                  <span>Total system mass</span>
+                </div>
+                <div>
+                  <strong>
+                    {(result.v * factor).toFixed(1)}
+                    <small>{unit}</small>
+                  </strong>
+                  <span>Ground speed</span>
+                </div>
+              </div>
+              <div className="terrain">
+                <svg viewBox="0 0 400 75" aria-hidden="true">
+                  <path
+                    d={`M0 60 Q100 ${50 + s.grade} 200 40 T400 ${40 - s.grade}`}
+                    fill="none"
+                    stroke="#b8ec83"
+                    strokeWidth="2"
+                  />
+                  <circle cx="200" cy="40" r="5" fill="#d3f6a7" />
+                </svg>
+                <span>
+                  {s.grade > 0 ? "+" : ""}
+                  {s.grade}% GRADE
+                </span>
+              </div>
+              <div className="result-details">
+                {[
+                  ["Selected gear", `${rings[ring]} / ${cogs[cog]} T`],
+                  ["Gear ratio", `${result.ratio.toFixed(2)} : 1`],
+                  ["Development", `${result.development.toFixed(2)} m/rev`],
+                  ["Gear inches", `${result.gearInches.toFixed(1)}″`],
+                ].map(([k, v]) => (
+                  <div key={k}>
+                    <span>{k}</span>
+                    <b>{v}</b>
+                  </div>
+                ))}
+              </div>
+              <p className="force-note">
+                {result.signedPower < 0
+                  ? `Net wheel power: ${result.wheelPower.toFixed(0)} W. Braking or acceleration balances the surplus.`
+                  : "A steady effort to hold this speed. No acceleration, just you and the road."}
+              </p>
+            </section>
+            <section className="explain">
+              <span>THE SCIENCE, SIMPLIFIED</span>
+              <h3>Where do the watts go?</h3>
+              {[
+                ["Air resistance", result.aero],
+                ["Rolling resistance", result.rolling],
+                ["Gravity", result.gravity],
+              ].map(([name, f]) => (
+                <div className="force" key={name}>
+                  <span>{name}</span>
+                  <b>{(Number(f) * result.v).toFixed(0)} W</b>
+                </div>
+              ))}
+              <p>
+                Wheel-level forces · standard atmosphere. W/kg uses rider + bike
+                mass.
+              </p>
+            </section>
+          </aside>
+        </div>
+        <section className="card chart">
+          <div className="card-title">
+            <div>
+              <h2>Every gear, at a glance.</h2>
+              <p>
+                Power and speed at {s.cadence} rpm. Select a cell to explore.
+              </p>
+            </div>
+            <div className="legend">
+              Less effort <span /> More effort
+            </div>
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>FRONT / REAR</th>
+                  {cogs.map((t) => (
+                    <th key={t}>{t}T</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rings.map((f, fi) => (
+                  <tr key={f}>
+                    <th>{f}T</th>
+                    {cogs.map((r, ri) => {
+                      const c = calculate(s, f, r);
+                      return (
+                        <td key={r}>
+                          <button
+                            style={{
+                              background: `hsl(${100 - Math.min(1, c.power / 700) * 75} 50% ${96 - Math.min(1, c.power / 700) * 12}%)`,
+                            }}
+                            className={
+                              fi === ring && ri === cog ? "current" : ""
+                            }
+                            aria-pressed={fi === ring && ri === cog}
+                            aria-label={`${f} by ${r}: ${Math.round(c.power)} watts, ${(c.v * factor).toFixed(1)} ${unit}`}
+                            onClick={() => update({ ring: fi, cog: ri })}
+                          >
+                            <b>
+                              {Math.round(c.power)}
+                              <small> W</small>
+                            </b>
+                            <span>
+                              {(c.v * factor).toFixed(1)} {unit}
+                            </span>
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <footer>
+          <span>CADENCE / LAB · Built for the curious cyclist.</span>
+          <span>Estimates, not a power meter. Ride your own ride.</span>
+        </footer>
+      </main>
+    </>
+  );
+}
