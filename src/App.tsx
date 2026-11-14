@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import NumericInput from "./NumericInput";
+import { advancedDefaults, combinedMass, readMasses, restoreAdvanced, wattsPerKg } from "./settings";
 import { calculate, parseTeeth, wheelCircumference } from "./physics";
 import {
   defaultCassette,
@@ -8,15 +9,9 @@ import {
 } from "./data/gear-options";
 import "./App.css";
 const defaults = {
+  ...advancedDefaults,
   cadence: 90,
   grade: 0,
-  mass: 80,
-  circumference: wheelCircumference(622, 28),
-  cda: 0.32,
-  crr: 0.005,
-  loss: 0.025,
-  wind: 0,
-  altitude: 0,
   imperial: false,
   front: "Shimano/Road",
   rear: "Shimano/Road",
@@ -27,8 +22,6 @@ const defaults = {
   follow: true,
   cf: "50,34",
   cr: "11,13,15,17,19,21,24,28,32,36",
-  tire: "622-28",
-  position: "0.32",
 };
 type State = typeof defaults;
 function load(): State {
@@ -42,14 +35,13 @@ function load(): State {
         (typeof v[k] !== "number" || Number.isFinite(v[k]))
       )
         Object.assign(s, { [k]: v[k] });
+    Object.assign(s, readMasses(v));
     if (v.position === undefined)
       s.position = [0.4, 0.32, 0.28, 0.23].includes(s.cda) ? String(s.cda) : "custom";
     if (
       ![s.front, s.rear].every(
         (id) => id === "custom" || gearCategories.includes(id),
       ) ||
-      s.mass < 10 ||
-      s.mass > 300 ||
       s.loss < 0 ||
       s.loss > 0.5 ||
       s.cda < 0 ||
@@ -199,6 +191,7 @@ function Drawing({
 export default function App() {
   const [resetVersion, setResetVersion] = useState(0);
   const [presetVersion, setPresetVersion] = useState(0);
+  const [advancedVersion, setAdvancedVersion] = useState(0);
   const [s, set] = useState(load),
     update = (p: Partial<State>) => set((old) => ({ ...old, ...p }));
   useEffect(() => {
@@ -220,7 +213,8 @@ export default function App() {
     s.rear === "custom" ? cr || [17] : (rears[s.ro] || rears[0]).teeth;
   const ring = Math.max(0, Math.min(s.ring, rings.length - 1)),
     cog = Math.max(0, Math.min(s.cog, cogs.length - 1));
-  const result = calculate(s, rings[ring], cogs[cog]),
+  const conditions = { ...s, mass: combinedMass(s) };
+  const result = calculate(conditions, rings[ring], cogs[cog]),
     unit = s.imperial ? "mph" : "km/h",
     factor = s.imperial ? 2.236936 : 3.6;
   const changeCategory = (id: string, front: boolean) =>
@@ -481,15 +475,26 @@ export default function App() {
               <summary>
                 Advanced settings <span>Rider, tires & environment</span>
               </summary>
-              <div className="advanced-grid">
+              <button className="reset advanced-reset" onClick={() => {
+                set((old) => restoreAdvanced(old));
+                setAdvancedVersion((v) => v + 1);
+              }}>Reset advanced settings</button>
+              <div className="advanced-grid" key={advancedVersion}>
                 <NumberField
-                  label={`Rider + bike mass (${s.imperial ? "lb" : "kg"})`}
-                  value={s.mass * (s.imperial ? 2.204623 : 1)}
-                  min={s.imperial ? 22.05 : 10}
-                  max={s.imperial ? 661 : 300}
+                  label={`Rider mass (${s.imperial ? "lb" : "kg"})`}
+                  value={s.riderMass * (s.imperial ? 2.204623 : 1)}
+                  min={10 * (s.imperial ? 2.204623 : 1)}
+                  max={250 * (s.imperial ? 2.204623 : 1)}
                   onChange={(n) =>
-                    update({ mass: n / (s.imperial ? 2.204623 : 1) })
+                    update({ riderMass: n / (s.imperial ? 2.204623 : 1) })
                   }
+                />
+                <NumberField
+                  label={`Bike + kit mass (${s.imperial ? "lb" : "kg"})`}
+                  value={s.bikeMass * (s.imperial ? 2.204623 : 1)}
+                  min={0}
+                  max={100 * (s.imperial ? 2.204623 : 1)}
+                  onChange={(n) => update({ bikeMass: n / (s.imperial ? 2.204623 : 1) })}
                 />
                 <label className="field">
                   Tire size (ETRTO)
@@ -611,10 +616,10 @@ export default function App() {
               <div className="result-primary">
                 <div>
                   <strong>
-                    {(result.power / s.mass).toFixed(2)}
+                    {wattsPerKg(result.power, s.riderMass).toFixed(2)}
                     <small>W/kg</small>
                   </strong>
-                  <span>Total system mass</span>
+                  <span>per kg rider mass</span>
                 </div>
                 <div>
                   <strong>
@@ -652,8 +657,7 @@ export default function App() {
                 </div>
               ))}
               <p>
-                Wheel-level forces · standard atmosphere. W/kg uses rider + bike
-                mass.
+                Wheel power uses rider + bike + kit mass. W/kg uses rider mass only.
               </p>
             </section>
           </aside>
@@ -684,7 +688,7 @@ export default function App() {
                   <tr key={f}>
                     <th>{f}T</th>
                     {cogs.map((r, ri) => {
-                      const c = calculate(s, f, r);
+                      const c = calculate(conditions, f, r);
                       return (
                         <td key={r}>
                           <button

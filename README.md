@@ -18,8 +18,10 @@ npm run build
 
 ## Model & data
 
-Cadence and selected gearing determine speed. Steady-state rider power balances gravity, rolling resistance and signed air drag, then accounts for drivetrain loss. Standard-atmosphere density uses a 15°C sea-level temperature and tropospheric lapse rate. Negative power is displayed as zero/coasting, with signed wheel power retained. W/kg uses total rider + bicycle mass. Development and gear inches retain their conventional units in both display modes.
+Cadence and selected gearing determine speed. Steady-state rider power balances gravity, rolling resistance and signed air drag, then accounts for drivetrain loss. Standard-atmosphere density uses a 15°C sea-level temperature and tropospheric lapse rate. Negative power is displayed as zero/coasting, with signed wheel power retained. Physics uses rider mass plus bike and kit mass (defaults 72 kg + 8 kg); W/kg divides power by rider mass only. Legacy saved combined mass resets to these two defaults. Development and gear inches retain their conventional units in both display modes.
 
 `src/physics.ts` contains pure functions and hand-calculated sanity tests. `src/data/gears.ts` contains explicit cassette tooth sequences and manufacturer source URLs. The Shimano 12-speed 11–34 sequence intentionally has **no 16T** (adding one would make thirteen cogs). Catalog entries are identified by model/generation; they are not a compatibility checker or exhaustive historical catalog. GRX and gravel mullet cassettes may originate in MTB ranges, but no MTB cranksets or triples are included. Cassette ranges offered under a series include compatible same-manufacturer alternatives (e.g. HG710 11–36 with 105).
 
 Theoretical ETRTO circumference is π × (BSD + 2 × width). Tire deformation, pressure, road surface, rider movement and acceleration are not modeled; results are estimates, not a power meter.
+
+See [GEAR_AUDIT.md](GEAR_AUDIT.md) for the gearing audit, before/after changes, and generation-specific caveats. Advanced settings have their own reset; it leaves cadence, grade, gearing and units unchanged.

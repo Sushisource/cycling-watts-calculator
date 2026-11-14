@@ -27,4 +27,18 @@ describe("gearing catalog integrity", () => {
       11, 12, 13, 14, 15, 17, 19, 21, 24, 27, 30, 34,
     ]);
   });
+  it("includes RED OEM large doubles without inventing Force E1 sizes", () => {
+    for (const id of ["red", "red-d1"])
+      expect(series.find((s) => s.id === id)!.fronts).toEqual(
+        expect.arrayContaining([[46, 33], [48, 35], [50, 37], [52, 39], [54, 41], [56, 43]]),
+      );
+    expect(series.find((s) => s.id === "force")!.fronts).toEqual([[50, 37], [48, 35], [46, 33]]);
+  });
+  it("retains audited historical cassette sequences and crankset generations", () => {
+    expect(cassettes["AXS12 10-26"]).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 19, 21, 23, 26]);
+    expect(cassettes["SH11 14-28"]).toEqual([14, 15, 16, 17, 18, 19, 20, 21, 23, 25, 28]);
+    expect(series.find((s) => s.id === "ultegra-11")!.fronts).toContainEqual([53, 39]);
+    expect(series.find((s) => s.id === "rival-xplr13")!.fronts).toContainEqual([42]);
+    expect(series.find((s) => s.id === "red1")!.fronts).toContainEqual([68]);
+  });
 });
