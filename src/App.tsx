@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import NumericInput from "./NumericInput";
 import { calculate, parseTeeth, wheelCircumference } from "./physics";
 import {
   defaultCassette,
@@ -27,6 +28,7 @@ const defaults = {
   cf: "50,34",
   cr: "11,13,15,17,19,21,24,28,32,36",
   tire: "622-28",
+  position: "0.32",
 };
 type State = typeof defaults;
 function load(): State {
@@ -40,6 +42,8 @@ function load(): State {
         (typeof v[k] !== "number" || Number.isFinite(v[k]))
       )
         Object.assign(s, { [k]: v[k] });
+    if (v.position === undefined)
+      s.position = [0.4, 0.32, 0.28, 0.23].includes(s.cda) ? String(s.cda) : "custom";
     if (
       ![s.front, s.rear].every(
         (id) => id === "custom" || gearCategories.includes(id),
@@ -66,30 +70,27 @@ function NumberField({
   label,
   value,
   onChange,
+  onEdit,
   min = 0,
   max = 1000,
-  step = 1,
 }: {
   label: string;
   value: number;
   onChange: (n: number) => void;
+  onEdit?: () => void;
   min?: number;
   max?: number;
-  step?: number;
 }) {
   return (
     <label className="field">
       {label}
-      <input
-        type="number"
+      <NumericInput
+        label={label}
         min={min}
         max={max}
-        step={step}
-        value={+value.toFixed(4)}
-        onChange={(e) => {
-          const n = e.target.valueAsNumber;
-          if (Number.isFinite(n) && n >= min && n <= max) onChange(n);
-        }}
+        value={value}
+        onChange={onChange}
+        onEdit={onEdit}
       />
     </label>
   );
@@ -106,7 +107,7 @@ function Drawing({
   front: boolean;
 }) {
   const spacing = front ? 48 : 24;
-  const width = Math.max(280, teeth.length * spacing + 8);
+  const width = Math.max(front ? 120 : 280, teeth.length * spacing + 8);
   const stack = teeth
     .map((tooth, index) => ({ tooth, index }))
     .sort((a, b) => (front ? a.tooth - b.tooth : b.tooth - a.tooth));
@@ -193,11 +194,13 @@ function Drawing({
   );
 }
 export default function App() {
+  const [resetVersion, setResetVersion] = useState(0);
+  const [presetVersion, setPresetVersion] = useState(0);
   const [s, set] = useState(load),
     update = (p: Partial<State>) => set((old) => ({ ...old, ...p }));
   useEffect(() => {
     try {
-      localStorage.setItem("cadence-lab-v2", JSON.stringify(s));
+      if (s !== defaults) localStorage.setItem("cadence-lab-v2", JSON.stringify(s));
     } catch {
       /* Storage is optional. */
     }
@@ -339,7 +342,14 @@ export default function App() {
           <span className="brand-icon">↗</span> CADENCE <span>/ LAB</span>
         </a>
         <div className="header-right">
-          <span className="local-status">● All calculations on-device</span>
+          <button className="reset" onClick={() => {
+            try {
+              localStorage.removeItem("cadence-lab");
+              localStorage.removeItem("cadence-lab-v2");
+            } catch { /* Storage is optional. */ }
+            set(defaults);
+            setResetVersion((v) => v + 1);
+          }}>Reset all settings</button>
           <div className="segmented">
             {[false, true].map((v) => (
               <button
@@ -353,14 +363,16 @@ export default function App() {
           </div>
         </div>
       </header>
-      <main>
+      <div className="compact-results" role="status" aria-label="Current power, speed and gear">
+        <strong>{Math.round(result.power)} W</strong>
+        <span>{(result.v * factor).toFixed(1)} {unit}</span>
+        <span>{rings[ring]} / {cogs[cog]} T</span>
+      </div>
+      <main key={resetVersion}>
         <div className="intro">
           <div>
-            <div className="eyebrow">THE CYCLING POWER CALCULATOR</div>
-            <h1>Find your next gear.</h1>
-            <p>Explore the relationship between gearing, speed, and effort.</p>
+            <h1>Cycling power calculator</h1>
           </div>
-          <span className="model-badge">STEADY-STATE MODEL ↗</span>
         </div>
         <div className="workspace">
           <div className="controls">
@@ -374,7 +386,6 @@ export default function App() {
                   {
                     key: "cadence",
                     name: "Cadence",
-                    desc: "Your pedaling rhythm",
                     min: 40,
                     max: 140,
                     step: 1,
@@ -385,12 +396,6 @@ export default function App() {
                   {
                     key: "grade",
                     name: "Road gradient",
-                    desc:
-                      s.grade === 0
-                        ? "A little room to get up to speed"
-                        : s.grade > 0
-                          ? "Up the road, up the watts"
-                          : "Let gravity do some of the work",
                     min: -15,
                     max: 25,
                     step: 0.1,
@@ -404,21 +409,14 @@ export default function App() {
                   <div className="slider-row">
                     <div>
                       <h3>{c.name}</h3>
-                      <span>{c.desc}</span>
                     </div>
                     <div className="number-unit">
-                      <input
-                        aria-label={c.name}
-                        type="number"
+                      <NumericInput
+                        label={c.name}
                         value={s[c.key]}
                         min={c.min}
                         max={c.max}
-                        step={c.step}
-                        onChange={(e) => {
-                          const n = e.target.valueAsNumber;
-                          if (Number.isFinite(n) && n >= c.min && n <= c.max)
-                            update({ [c.key]: n });
-                        }}
+                        onChange={(n) => update({ [c.key]: n })}
                       />
                       <span>{c.unit}</span>
                     </div>
@@ -446,7 +444,6 @@ export default function App() {
                 <span>02</span>
               </div>
               <div className="follow-row">
-                <span>Build your setup</span>
                 <label>
                   <input
                     type="checkbox"
@@ -495,6 +492,7 @@ export default function App() {
                   <select
                     value={s.tire}
                     onChange={(e) => {
+                      setPresetVersion((v) => v + 1);
                       const tire = e.target.value,
                         [bsd, w] = tire.split("-").map(Number);
                       update({
@@ -519,6 +517,7 @@ export default function App() {
                   </select>
                 </label>
                 <NumberField
+                  key={`circumference-${presetVersion}`}
                   label="Circumference (mm)"
                   value={s.circumference * 1000}
                   min={500}
@@ -526,16 +525,15 @@ export default function App() {
                   onChange={(n) =>
                     update({ circumference: n / 1000, tire: "custom" })
                   }
+                  onEdit={() => update({ tire: "custom" })}
                 />
                 <label className="field">
                   Position preset
                   <select
-                    value={
-                      [0.4, 0.32, 0.28, 0.23].includes(s.cda) ? s.cda : "custom"
-                    }
+                    value={s.position}
                     onChange={(e) => {
-                      if (e.target.value !== "custom")
-                        update({ cda: +e.target.value });
+                      setPresetVersion((v) => v + 1);
+                      update({ position: e.target.value, ...(e.target.value !== "custom" ? { cda: +e.target.value } : {}) });
                     }}
                   >
                     <option value="0.4">Tops · 0.40</option>
@@ -546,24 +544,23 @@ export default function App() {
                   </select>
                 </label>
                 <NumberField
+                  key={`cda-${presetVersion}`}
                   label="CdA (m²)"
                   value={s.cda}
                   max={2}
-                  step={0.01}
-                  onChange={(n) => update({ cda: n })}
+                  onChange={(n) => update({ cda: n, position: "custom" })}
+                  onEdit={() => update({ position: "custom" })}
                 />
                 <NumberField
                   label="Rolling resistance · Crr"
                   value={s.crr}
                   max={0.1}
-                  step={0.001}
                   onChange={(n) => update({ crr: n })}
                 />
                 <NumberField
                   label="Drivetrain loss (%)"
                   value={s.loss * 100}
                   max={50}
-                  step={0.1}
                   onChange={(n) => update({ loss: n / 100 })}
                 />
                 <NumberField
@@ -571,7 +568,6 @@ export default function App() {
                   value={s.wind * factor}
                   min={-100}
                   max={100}
-                  step={0.5}
                   onChange={(n) => update({ wind: n / factor })}
                 />
                 <NumberField
@@ -593,8 +589,7 @@ export default function App() {
           <aside>
             <section className="result-card">
               <div className="result-top">
-                <span>YOUR EFFORT</span>
-                <span className="live">● LIVE</span>
+                <span>RIDER POWER</span>
               </div>
               <div className="power">
                 {Math.round(result.power)}
@@ -621,21 +616,6 @@ export default function App() {
                   <span>Ground speed</span>
                 </div>
               </div>
-              <div className="terrain">
-                <svg viewBox="0 0 400 75" aria-hidden="true">
-                  <path
-                    d={`M0 60 Q100 ${50 + s.grade} 200 40 T400 ${40 - s.grade}`}
-                    fill="none"
-                    stroke="#b8ec83"
-                    strokeWidth="2"
-                  />
-                  <circle cx="200" cy="40" r="5" fill="#d3f6a7" />
-                </svg>
-                <span>
-                  {s.grade > 0 ? "+" : ""}
-                  {s.grade}% GRADE
-                </span>
-              </div>
               <div className="result-details">
                 {[
                   ["Selected gear", `${rings[ring]} / ${cogs[cog]} T`],
@@ -649,15 +629,10 @@ export default function App() {
                   </div>
                 ))}
               </div>
-              <p className="force-note">
-                {result.signedPower < 0
-                  ? `Net wheel power: ${result.wheelPower.toFixed(0)} W. Braking or acceleration balances the surplus.`
-                  : "A steady effort to hold this speed. No acceleration, just you and the road."}
-              </p>
+              {result.signedPower < 0 && <p className="force-note">Net wheel power: {result.wheelPower.toFixed(0)} W.</p>}
             </section>
             <section className="explain">
-              <span>THE SCIENCE, SIMPLIFIED</span>
-              <h3>Where do the watts go?</h3>
+              <h3>Wheel power breakdown</h3>
               {[
                 ["Air resistance", result.aero],
                 ["Rolling resistance", result.rolling],
@@ -674,11 +649,10 @@ export default function App() {
               </p>
             </section>
           </aside>
-        </div>
         <section className="card chart">
           <div className="card-title">
             <div>
-              <h2>Every gear, at a glance.</h2>
+              <h2>Gear chart</h2>
               <p>
                 Power and speed at {s.cadence} rpm. Select a cell to explore.
               </p>
@@ -733,9 +707,9 @@ export default function App() {
             </table>
           </div>
         </section>
+        </div>
         <footer>
-          <span>CADENCE / LAB · Built for the curious cyclist.</span>
-          <span>Estimates, not a power meter. Ride your own ride.</span>
+          <span>Estimated steady-state power · not a power meter.</span>
         </footer>
       </main>
     </>

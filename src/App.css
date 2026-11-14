@@ -99,6 +99,35 @@ h1 {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 330px;
   gap: 24px;
+  align-items: start;
+}
+.workspace aside {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  position: sticky;
+  top: 16px;
+  align-self: start;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+.workspace > .chart {
+  grid-column: 1;
+  min-width: 0;
+}
+.compact-results {
+  display: none;
+}
+.reset {
+  padding: 8px;
+  border: 1px solid #ced8c3;
+  border-radius: 6px;
+  background: white;
+  color: #405536;
+  cursor: pointer;
+}
+input[aria-invalid="true"] {
+  border-color: #b74d31;
+  outline: 1px solid #b74d31;
 }
 .controls {
   min-width: 0;
@@ -141,12 +170,22 @@ h1 {
   color: #919c86;
 }
 .number-unit {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 7px;
   padding: 8px;
   border: 1px solid #dfe6d5;
   border-radius: 7px;
+}
+.number-unit .error {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 220px;
+  background: white;
+  padding: 6px;
+  z-index: 2;
 }
 .number-unit input {
   border: 0;
@@ -196,15 +235,15 @@ h1 {
 }
 .pickers {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   gap: 26px;
 }
 .picker {
   min-width: 0;
 }
 .picker + .picker {
-  padding-top: 24px;
-  border-top: 1px solid #edf0e8;
+  padding-left: 16px;
+  border-left: 1px solid #edf0e8;
 }
 .section-label {
   display: flex;
@@ -634,7 +673,15 @@ footer {
   }
   header {
     padding: 0 5%;
-    height: 74px;
+    min-height: 100px;
+    height: auto;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-block: 12px;
+  }
+  .header-right {
+    gap: 8px;
+    flex-wrap: wrap;
   }
   .brand {
     font-size: 14px;
@@ -668,10 +715,30 @@ footer {
     display: flex;
     flex-direction: column;
     gap: 0;
+    align-items: stretch;
   }
   .controls,
   .workspace aside {
     display: contents;
+  }
+  .compact-results {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    gap: 8px;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    padding: 14px 8px calc(14px + env(safe-area-inset-bottom));
+    background: #25392f;
+    color: #d2f4a9;
+    font-size: 13px;
+    box-shadow: 0 -2px 8px #0002;
+  }
+  body {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
   }
   .ride {
     order: -3;
@@ -687,6 +754,9 @@ footer {
   }
   .advanced {
     order: 1;
+  }
+  .workspace > .chart {
+    order: 2;
   }
   .power {
     font-size: 78px;
