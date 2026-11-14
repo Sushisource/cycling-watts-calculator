@@ -196,15 +196,15 @@ h1 {
 }
 .pickers {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 26px;
 }
 .picker {
   min-width: 0;
 }
 .picker + .picker {
-  padding-left: 24px;
-  border-left: 1px solid #edf0e8;
+  padding-top: 24px;
+  border-top: 1px solid #edf0e8;
 }
 .section-label {
   display: flex;
@@ -249,12 +249,8 @@ h1 {
 .field select:disabled {
   opacity: 0.5;
 }
-.gear-scroll {
-  overflow: auto;
-}
-.gear-scroll svg {
+.gear-stack svg {
   display: block;
-  min-width: 300px;
   width: 100%;
   height: 260px;
 }
@@ -314,7 +310,7 @@ h1 {
   fill: white;
 }
 .gear text {
-  font-size: 14px;
+  font-size: 12px;
   fill: #536b40;
 }
 .gear.active text {
@@ -598,7 +594,7 @@ footer {
     gap: 14px;
   }
   .picker + .picker {
-    padding-left: 14px;
+    padding-left: 0;
   }
   .two-col {
     grid-template-columns: 1fr;

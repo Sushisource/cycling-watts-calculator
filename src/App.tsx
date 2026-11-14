@@ -105,7 +105,8 @@ function Drawing({
   select: (i: number) => void;
   front: boolean;
 }) {
-  const width = Math.max(280, teeth.length * 48 + 24);
+  const spacing = front ? 48 : 24;
+  const width = Math.max(280, teeth.length * spacing + 8);
   const stack = teeth
     .map((tooth, index) => ({ tooth, index }))
     .sort((a, b) => (front ? a.tooth - b.tooth : b.tooth - a.tooth));
@@ -115,14 +116,9 @@ function Drawing({
         <span>← {front ? "Inboard / frame" : "Inboard / wheel"}</span>
         <span>Outboard →</span>
       </div>
-      <div
-        className="gear-scroll"
-        tabIndex={0}
-        aria-label="Scroll gear stack horizontally"
-      >
+      <div className="gear-stack">
         <svg
           viewBox={`0 0 ${width} 260`}
-          style={{ minWidth: width }}
           aria-label={front ? "Chainrings" : "Cassette"}
           role="group"
         >
@@ -135,7 +131,7 @@ function Drawing({
             strokeWidth="8"
           />
           {stack.map(({ tooth: t, index: i }, position) => {
-            const x = (width - stack.length * 48) / 2 + position * 48 + 24;
+            const x = (width - stack.length * spacing) / 2 + position * spacing + spacing / 2;
             const height = (t / Math.max(...teeth)) * 180;
             return (
               <g
@@ -155,17 +151,17 @@ function Drawing({
               >
                 <rect
                   className="gear-hit"
-                  x={x - 23}
+                  x={x - spacing / 2 + 1}
                   y="12"
-                  width="46"
+                  width={spacing - 2}
                   height="240"
                   rx="8"
                 />
                 <rect
                   className="plate"
-                  x={x - 5}
+                  x={x - 3}
                   y={120 - height / 2}
-                  width="10"
+                  width="6"
                   height={height}
                   rx="3"
                 />
@@ -175,14 +171,14 @@ function Drawing({
                 />
                 <rect
                   className="hub"
-                  x={x - 9}
+                  x={x - 5}
                   y="112"
-                  width="18"
+                  width="10"
                   height="16"
                   rx="3"
                 />
                 <text x={x} y="238" textAnchor="middle">
-                  {t}T
+                  {t}
                 </text>
               </g>
             );
@@ -192,7 +188,6 @@ function Drawing({
       <p className="stack-note">
         Top-down view ·{" "}
         {front ? "big ring outboard" : "largest cog nearest wheel"}
-        {teeth.length > 5 ? " · swipe to explore →" : ""}
       </p>
     </div>
   );
@@ -313,7 +308,7 @@ export default function App() {
               >
                 {options.map((v, i) => (
                   <option key={i} value={i}>
-                    {v.label} — {v.groupsets.join(", ")}
+                    {v.label}
                   </option>
                 ))}
               </select>
@@ -477,7 +472,7 @@ export default function App() {
                 {picker(false)}
               </div>
               <p className="compatibility">
-                ⓘ Mix and match to compare ratios. Component compatibility is
+                Mix and match to compare ratios. Component compatibility is
                 not guaranteed.
               </p>
             </section>
