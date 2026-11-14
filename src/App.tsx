@@ -73,6 +73,7 @@ function NumberField({
   onEdit,
   min = 0,
   max = 1000,
+  precision = 1,
 }: {
   label: string;
   value: number;
@@ -80,6 +81,7 @@ function NumberField({
   onEdit?: () => void;
   min?: number;
   max?: number;
+  precision?: number;
 }) {
   return (
     <label className="field">
@@ -88,6 +90,7 @@ function NumberField({
         label={label}
         min={min}
         max={max}
+        precision={precision}
         value={value}
         onChange={onChange}
         onEdit={onEdit}
@@ -416,6 +419,7 @@ export default function App() {
                         value={s[c.key]}
                         min={c.min}
                         max={c.max}
+                        precision={c.key === "cadence" ? 0 : 1}
                         onChange={(n) => update({ [c.key]: n })}
                       />
                       <span>{c.unit}</span>
@@ -519,6 +523,7 @@ export default function App() {
                 <NumberField
                   key={`circumference-${presetVersion}`}
                   label="Circumference (mm)"
+                  precision={0}
                   value={s.circumference * 1000}
                   min={500}
                   max={4000}
@@ -546,6 +551,7 @@ export default function App() {
                 <NumberField
                   key={`cda-${presetVersion}`}
                   label="CdA (m²)"
+                  precision={3}
                   value={s.cda}
                   max={2}
                   onChange={(n) => update({ cda: n, position: "custom" })}
@@ -553,6 +559,7 @@ export default function App() {
                 />
                 <NumberField
                   label="Rolling resistance · Crr"
+                  precision={4}
                   value={s.crr}
                   max={0.1}
                   onChange={(n) => update({ crr: n })}
@@ -572,6 +579,7 @@ export default function App() {
                 />
                 <NumberField
                   label={`Altitude (${s.imperial ? "ft" : "m"})`}
+                  precision={0}
                   value={s.altitude * (s.imperial ? 3.28084 : 1)}
                   min={s.imperial ? -1640 : -500}
                   max={s.imperial ? 32808 : 10000}

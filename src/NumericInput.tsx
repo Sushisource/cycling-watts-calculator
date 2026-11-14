@@ -1,21 +1,24 @@
 import { useId, useState } from "react";
-import { parseNumericInput } from "./numeric";
+import { formatNumericInput, parseNumericInput } from "./numeric";
 
-export default function NumericInput({ label, value, onChange, onEdit, min = 0, max = 1000 }: {
+export default function NumericInput({ label, value, onChange, onEdit, min = 0, max = 1000, precision = 1 }: {
   label: string;
   value: number;
   onChange: (value: number) => void;
   onEdit?: () => void;
   min?: number;
   max?: number;
+  precision?: number;
 }) {
   const [previous, setPrevious] = useState(value);
-  const [draft, setDraft] = useState(String(+value.toFixed(6)));
+  const [draft, setDraft] = useState(formatNumericInput(value, precision));
+  const [dirty, setDirty] = useState(false);
   const [invalid, setInvalid] = useState(false);
   const errorId = useId();
   if (previous !== value) {
     setPrevious(value);
-    setDraft(String(+value.toFixed(6)));
+    setDraft(formatNumericInput(value, precision));
+    setDirty(false);
     setInvalid(false);
   }
   return <>
@@ -28,13 +31,19 @@ export default function NumericInput({ label, value, onChange, onEdit, min = 0, 
       value={draft}
       onChange={(e) => {
         setDraft(e.target.value);
+        setDirty(true);
         setInvalid(false);
         onEdit?.();
       }}
       onBlur={() => {
+        if (!dirty) return;
         const next = parseNumericInput(draft, min, max);
         setInvalid(next === null);
-        if (next !== null) onChange(next);
+        if (next !== null) {
+          setDraft(formatNumericInput(next, precision));
+          setDirty(false);
+          onChange(next);
+        }
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter") e.currentTarget.blur();
