@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { calculate, parseTeeth, wheelCircumference } from "./physics";
-import { cassettes, series } from "./data/gears";
+import {
+  defaultCassette,
+  gearCategories,
+  gearOptions,
+} from "./data/gear-options";
 import "./App.css";
 const defaults = {
   cadence: 90,
@@ -13,10 +17,10 @@ const defaults = {
   wind: 0,
   altitude: 0,
   imperial: false,
-  front: "105",
-  rear: "105",
-  fo: 0,
-  ro: 0,
+  front: "Shimano/Road",
+  rear: "Shimano/Road",
+  fo: 1,
+  ro: defaultCassette("Shimano/Road"),
   ring: 0,
   cog: 5,
   follow: true,
@@ -27,7 +31,7 @@ const defaults = {
 type State = typeof defaults;
 function load(): State {
   try {
-    const v = JSON.parse(localStorage.getItem("cadence-lab") || "null");
+    const v = JSON.parse(localStorage.getItem("cadence-lab-v2") || "null");
     if (!v) return defaults;
     const s = { ...defaults };
     for (const k of Object.keys(s) as (keyof State)[])
@@ -38,7 +42,7 @@ function load(): State {
         Object.assign(s, { [k]: v[k] });
     if (
       ![s.front, s.rear].every(
-        (id) => id === "custom" || series.some((g) => g.id === id),
+        (id) => id === "custom" || gearCategories.includes(id),
       ) ||
       s.mass < 10 ||
       s.mass > 300 ||
@@ -49,7 +53,8 @@ function load(): State {
       s.circumference <= 0 ||
       s.altitude < -500 ||
       s.altitude > 10000 ||
-      s.cadence < 0
+      s.cadence < 0 ||
+      ![s.fo, s.ro, s.ring, s.cog].every((n) => Number.isInteger(n) && n >= 0)
     )
       return defaults;
     return s;
@@ -100,57 +105,95 @@ function Drawing({
   select: (i: number) => void;
   front: boolean;
 }) {
-  const width = Math.max(300, teeth.length * 53);
+  const width = Math.max(280, teeth.length * 48 + 24);
+  const stack = teeth
+    .map((tooth, index) => ({ tooth, index }))
+    .sort((a, b) => (front ? a.tooth - b.tooth : b.tooth - a.tooth));
   return (
-    <div className="gear-scroll">
-      <svg
-        viewBox={`0 0 ${width} 150`}
-        aria-label={front ? "Chainrings" : "Cassette"}
-        role="group"
+    <div className="stack-picker">
+      <div className="stack-direction">
+        <span>← {front ? "Inboard / frame" : "Inboard / wheel"}</span>
+        <span>Outboard →</span>
+      </div>
+      <div
+        className="gear-scroll"
+        tabIndex={0}
+        aria-label="Scroll gear stack horizontally"
       >
-        <line
-          x1="0"
-          y1="65"
-          x2={width}
-          y2="65"
-          stroke="#e2e7dc"
-          strokeDasharray="3 5"
-        />
-        {teeth.map((t, i) => {
-          const x = (width / (teeth.length + 1)) * (i + 1),
-            r = t * 0.95;
-          return (
-            <g
-              key={t}
-              className={i === active ? "gear active" : "gear"}
-              role="button"
-              tabIndex={0}
-              aria-label={`${t} tooth ${front ? "chainring" : "cog"}`}
-              aria-pressed={i === active}
-              onClick={() => select(i)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  select(i);
-                }
-              }}
-            >
-              <circle cx={x} cy="65" r={r} />
-              <circle
-                className="teeth"
-                cx={x}
-                cy="65"
-                r={r + 1}
-                strokeDasharray={`${(Math.PI * (r + 1)) / t} ${(Math.PI * (r + 1)) / t}`}
-              />
-              <circle className="hub" cx={x} cy="65" r={Math.max(4, r * 0.4)} />
-              <text x={x} y="140" textAnchor="middle">
-                {t}T
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+        <svg
+          viewBox={`0 0 ${width} 260`}
+          style={{ minWidth: width }}
+          aria-label={front ? "Chainrings" : "Cassette"}
+          role="group"
+        >
+          <line
+            x1="0"
+            y1="120"
+            x2={width}
+            y2="120"
+            stroke="#b5c1aa"
+            strokeWidth="8"
+          />
+          {stack.map(({ tooth: t, index: i }, position) => {
+            const x = (width - stack.length * 48) / 2 + position * 48 + 24;
+            const height = (t / Math.max(...teeth)) * 180;
+            return (
+              <g
+                key={t}
+                className={i === active ? "gear active" : "gear"}
+                role="button"
+                tabIndex={0}
+                aria-label={`${t} tooth ${front ? "chainring" : "cog"}`}
+                aria-pressed={i === active}
+                onClick={() => select(i)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    select(i);
+                  }
+                }}
+              >
+                <rect
+                  className="gear-hit"
+                  x={x - 23}
+                  y="12"
+                  width="46"
+                  height="240"
+                  rx="8"
+                />
+                <rect
+                  className="plate"
+                  x={x - 5}
+                  y={120 - height / 2}
+                  width="10"
+                  height={height}
+                  rx="3"
+                />
+                <path
+                  className="plate-edge"
+                  d={`M${x - 2} ${120 - height / 2 + 5} V${120 + height / 2 - 5}`}
+                />
+                <rect
+                  className="hub"
+                  x={x - 9}
+                  y="112"
+                  width="18"
+                  height="16"
+                  rx="3"
+                />
+                <text x={x} y="238" textAnchor="middle">
+                  {t}T
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      <p className="stack-note">
+        Top-down view ·{" "}
+        {front ? "big ring outboard" : "largest cog nearest wheel"}
+        {teeth.length > 5 ? " · swipe to explore →" : ""}
+      </p>
     </div>
   );
 }
@@ -159,38 +202,42 @@ export default function App() {
     update = (p: Partial<State>) => set((old) => ({ ...old, ...p }));
   useEffect(() => {
     try {
-      localStorage.setItem("cadence-lab", JSON.stringify(s));
+      localStorage.setItem("cadence-lab-v2", JSON.stringify(s));
     } catch {
       /* Storage is optional. */
     }
   }, [s]);
-  const fs = series.find((g) => g.id === s.front) || series[2],
-    rs = series.find((g) => g.id === s.rear) || series[2];
+  const [fm, fd] = s.front.split("/"),
+    [rm, rd] = s.rear.split("/");
+  const fronts = gearOptions(fm, fd, true),
+    rears = gearOptions(rm, rd, false);
   const cf = parseTeeth(s.cf, true),
     cr = parseTeeth(s.cr);
   const rings =
-    s.front === "custom" ? cf || [50, 34] : fs.fronts[s.fo] || fs.fronts[0];
+    s.front === "custom" ? cf || [50, 34] : (fronts[s.fo] || fronts[0]).teeth;
   const cogs =
-    s.rear === "custom" ? cr || [17] : cassettes[rs.rears[s.ro] || rs.rears[0]];
+    s.rear === "custom" ? cr || [17] : (rears[s.ro] || rears[0]).teeth;
   const ring = Math.max(0, Math.min(s.ring, rings.length - 1)),
     cog = Math.max(0, Math.min(s.cog, cogs.length - 1));
   const result = calculate(s, rings[ring], cogs[cog]),
     unit = s.imperial ? "mph" : "km/h",
     factor = s.imperial ? 2.236936 : 3.6;
-  const changeSeries = (id: string, front: boolean) =>
+  const changeCategory = (id: string, front: boolean) =>
     update(
       front
         ? {
             front: id,
             fo: 0,
             ring: 0,
-            ...(s.follow ? { rear: id, ro: 0, cog: 0 } : {}),
+            ...(s.follow ? { rear: id, ro: defaultCassette(id), cog: 0 } : {}),
           }
-        : { rear: id, ro: 0, cog: 0, follow: false },
+        : { rear: id, ro: defaultCassette(id), cog: 0, follow: false },
     );
   const picker = (front: boolean) => {
-    const id = front ? s.front : s.rear,
-      g = front ? fs : rs;
+    const id = front ? s.front : s.rear;
+    const [manufacturer, discipline = "Road"] = id.split("/");
+    const options = front ? fronts : rears;
+    const optionIndex = front ? s.fo : s.ro;
     return (
       <div className="picker">
         <div className="section-label">
@@ -201,16 +248,12 @@ export default function App() {
           <label className="field">
             Manufacturer
             <select
-              value={id === "custom" ? "Custom" : g.manufacturer}
+              value={id === "custom" ? "Custom" : manufacturer}
               onChange={(e) =>
-                changeSeries(
+                changeCategory(
                   e.target.value === "Custom"
                     ? "custom"
-                    : series.find(
-                        (x) =>
-                          x.manufacturer === e.target.value &&
-                          x.discipline === g.discipline,
-                      )!.id,
+                    : `${e.target.value}/${discipline}`,
                   front,
                 )
               }
@@ -224,16 +267,9 @@ export default function App() {
             Discipline
             <select
               disabled={id === "custom"}
-              value={g.discipline}
+              value={discipline}
               onChange={(e) =>
-                changeSeries(
-                  series.find(
-                    (x) =>
-                      x.manufacturer === g.manufacturer &&
-                      x.discipline === e.target.value,
-                  )!.id,
-                  front,
-                )
+                changeCategory(`${manufacturer}/${e.target.value}`, front)
               }
             >
               <option>Road</option>
@@ -264,28 +300,9 @@ export default function App() {
         ) : (
           <>
             <label className="field">
-              Groupset / series
-              <select
-                value={id}
-                onChange={(e) => changeSeries(e.target.value, front)}
-              >
-                {series
-                  .filter(
-                    (x) =>
-                      x.manufacturer === g.manufacturer &&
-                      x.discipline === g.discipline,
-                  )
-                  .map((x) => (
-                    <option value={x.id} key={x.id}>
-                      {x.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label className="field">
               {front ? "Chainring combination" : "Cassette range"}
               <select
-                value={front ? s.fo : s.ro}
+                value={options[optionIndex] ? optionIndex : 0}
                 onChange={(e) =>
                   update(
                     front
@@ -294,14 +311,16 @@ export default function App() {
                   )
                 }
               >
-                {(front ? g.fronts : g.rears).map((v, i) => (
+                {options.map((v, i) => (
                   <option key={i} value={i}>
-                    {Array.isArray(v)
-                      ? v.join(" / ") + " T"
-                      : v.replace(/^[^ ]+ /, "") + " T"}
+                    {v.label} — {v.groupsets.join(", ")}
                   </option>
                 ))}
               </select>
+              <span className="groupset-caption">
+                Offered by{" "}
+                {(options[optionIndex] || options[0]).groupsets.join(", ")}
+              </span>
             </label>
           </>
         )}
@@ -441,7 +460,11 @@ export default function App() {
                       update({
                         follow: e.target.checked,
                         ...(e.target.checked
-                          ? { rear: s.front, ro: 0, cog: 0 }
+                          ? {
+                              rear: s.front,
+                              ro: defaultCassette(s.front),
+                              cog: 0,
+                            }
                           : {}),
                       })
                     }

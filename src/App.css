@@ -256,38 +256,66 @@ h1 {
   display: block;
   min-width: 300px;
   width: 100%;
-  height: 150px;
+  height: 260px;
+}
+.stack-direction {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  color: #718164;
+  margin: 18px 0 5px;
+}
+.stack-note {
+  font-size: 10px;
+  line-height: 1.6;
+  color: #718164;
+  margin-top: 8px;
+}
+.groupset-caption {
+  min-height: 32px;
+  line-height: 1.6;
+  color: #6b7e5b;
 }
 .gear {
   cursor: pointer;
 }
-.gear circle {
-  fill: #fafcf7;
-  stroke: #ced8c3;
-  stroke-width: 1.4;
+.gear .gear-hit {
+  fill: transparent;
+  stroke: none;
 }
-.gear .teeth {
+.gear:hover .gear-hit,
+.gear:focus-visible .gear-hit {
+  fill: #f1f5eb;
+}
+.gear.active .gear-hit {
+  fill: #edf5e4;
+  stroke: #c5d8af;
+}
+.gear .plate {
+  fill: #b7c3ac;
+  stroke: #839574;
+  stroke-width: 1.5;
+}
+.gear .plate-edge {
   fill: none;
-  stroke: #c0ceb3;
-  stroke-width: 5;
+  stroke: #e9eee3;
+  stroke-width: 2;
 }
 .gear .hub {
-  fill: white;
+  fill: #ced6c6;
+  stroke: #91a27f;
 }
-.gear.active circle {
-  fill: #edf6e5;
-  stroke: #648b46;
-}
-.gear.active .teeth {
-  fill: none;
-  stroke: #648b46;
+.gear.active .plate {
+  fill: #648b46;
+  stroke: #426629;
 }
 .gear.active .hub {
   fill: white;
 }
 .gear text {
-  font-size: 11px;
-  fill: #8b9c7c;
+  font-size: 14px;
+  fill: #536b40;
 }
 .gear.active text {
   fill: #44662e;
@@ -596,6 +624,18 @@ footer {
   }
 }
 @media (max-width: 760px) {
+  .pickers {
+    grid-template-columns: 1fr;
+  }
+  .picker + .picker {
+    border-left: 0;
+    border-top: 1px solid #edf0e8;
+    padding-left: 0;
+    padding-top: 24px;
+  }
+  .two-col {
+    grid-template-columns: 1fr 1fr;
+  }
   header {
     padding: 0 5%;
     height: 74px;
